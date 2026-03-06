@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>DANG ADMIN | DASHBOARD</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://fonts.cdnfonts.com/css/growtopia" rel="stylesheet">
+    <style>
+        :root { --p: #3b82f6; --bg: #050505; --c: #111113; --border: rgba(255,255,255,0.1); }
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Growtopia', sans-serif; }
+        body { background: var(--bg); color: #fff; display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background: var(--c); border-right: 1px solid var(--border); padding: 30px 20px; }
+        .menu-item { padding: 15px; cursor: pointer; border-radius: 12px; margin-bottom: 5px; display: flex; gap: 10px; align-items: center; transition: 0.3s; }
+        .menu-item:hover, .active-tab { background: rgba(59,130,246,0.1); color: var(--p); }
+        .main { flex-grow: 1; padding: 40px; }
+        .card { background: var(--c); padding: 25px; border-radius: 20px; border: 1px solid var(--border); margin-bottom: 20px; }
+        input, textarea, select { width: 100%; padding: 15px; background: #1a1a1c; border: 1px solid var(--border); color: #fff; border-radius: 12px; margin-bottom: 15px; outline: none; }
+        select { cursor: pointer; appearance: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .btn { padding: 12px 15px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; color: #fff; font-size: 12px; transition: 0.2s; }
+        .btn:hover { opacity: 0.8; transform: translateY(-2px); }
+        .badge-cat { background: rgba(255,255,255,0.1); padding: 5px 10px; border-radius: 10px; font-size: 10px; margin-left: 10px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2 style="color:var(--p); margin-bottom:30px; letter-spacing: 1px;">DANG ADMIN</h2>
+    <div class="menu-item active-tab" id="m-o" onclick="tab('o')"><i data-lucide="package"></i> ORDERS</div>
+    <div class="menu-item" id="m-s" onclick="tab('s')"><i data-lucide="settings"></i> SETTINGS</div>
+    <div class="menu-item" id="m-n" onclick="tab('n')"><i data-lucide="bell"></i> NOTIF</div>
+    <div onclick="reset()" style="color:#ef4444; margin-top:50px; cursor:pointer; padding:15px; display:flex; gap:10px; align-items:center;">
+        <i data-lucide="alert-triangle"></i> RESET ALL
+    </div>
+</div>
+
+<div class="main">
+    <div id="v-o">
+        <h1 style="margin-bottom: 20px;">ORDER QUEUE</h1>
+        <div class="card">
+            <table>
+                <thead><tr><th>Q ID</th><th>PLAYER</th><th>ITEM</th><th>STATUS</th><th>AKSI</th></tr></thead>
+                <tbody id="list-o"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="v-s" style="display:none;">
+        <h1 style="margin-bottom: 20px;">SETTINGS & CATALOG</h1>
+        <div class="card">
+            <h3 style="margin-bottom: 15px; color: var(--p);">WORLD DEPOSIT</h3>
+            <input id="sd" placeholder="Contoh: DANGDEP">
+            <button class="btn" style="background:var(--p); width:100%" onclick="saveS()">SAVE DEPOSIT</button>
+        </div>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 15px; color: var(--p);">ADD PRODUCT</h3>
+            <input id="cn" placeholder="Nama Produk / Build">
+            <input id="cp" type="number" placeholder="Harga (VGL)">
+            <select id="ccat">
+                <option value="Small">Small Build</option>
+                <option value="Medium">Medium Build</option>
+                <option value="Pro">Pro Design</option>
+            </select>
+            <button class="btn" style="background:#10b981; width:100%" onclick="addP()">ADD TO CATALOG</button>
+        </div>
+        
+        <h3 style="margin: 30px 0 15px;">CURRENT CATALOG</h3>
+        <div id="list-p"></div>
+    </div>
+
+    <div id="v-n" style="display:none;">
+        <h1 style="margin-bottom: 20px;">NOTIFICATION MANAGER</h1>
+        <div class="card">
+            <input id="n-title" placeholder="Judul Pengumuman (Max 30 huruf)">
+            <textarea id="n-msg" placeholder="Isi Pesan / Info Libur / Promo..." style="height: 120px;"></textarea>
+            <select id="n-status">
+                <option value="active">Active (Muncul di web)</option>
+                <option value="inactive">Inactive (Sembunyikan)</option>
+            </select>
+            <button class="btn" style="background:var(--p); width:100%" onclick="saveN()">PUBLISH NOTIFIKASI</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    lucide.createIcons();
+    const firebaseConfig = { apiKey: "AIzaSyBO3bWX1UMaznxUY7hnTB4XHA2u4qQo1x4", authDomain: "webtooup.firebaseapp.com", databaseURL: "https://webtooup-default-rtdb.firebaseio.com", projectId: "webtooup" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let catalog = [];
+
+    function tab(t) { 
+        ['v-o','v-s','v-n'].forEach(v => document.getElementById(v).style.display='none');
+        ['m-o','m-s','m-n'].forEach(m => document.getElementById(m).classList.remove('active-tab'));
+        document.getElementById('v-'+t).style.display='block';
+        document.getElementById('m-'+t).classList.add('active-tab');
+    }
+
+    db.ref('orders').on('value', s => {
+        const o = s.val(); let h = "";
+        for(let id in o) {
+            h += `<tr>
+                <td><b style="color:var(--p); font-size:16px;">${o[id].q}</b></td>
+                <td><b>${o[id].gid}</b><br><small style="opacity:0.6">${o[id].wld}</small></td>
+                <td>${o[id].item}</td>
+                <td><span style="background:#333; padding:5px 10px; border-radius:10px; font-size:11px;">${o[id].status.toUpperCase()}</span></td>
+                <td style="display:flex; gap:5px;">
+                    <button class="btn" style="background:#f59e0b" onclick="upStat('${id}','Build')">BUILD</button>
+                    <button class="btn" style="background:#10b981" onclick="done('${id}')">DONE</button>
+                    <button class="btn" style="background:#3b82f6" onclick="window.open('${o[id].ss}')"><i data-lucide="image" size="14"></i></button>
+                </td>
+            </tr>`;
+        }
+        document.getElementById('list-o').innerHTML = h || `<tr><td colspan="5" style="text-align:center; opacity:0.5; padding:30px;">Belum ada pesanan masuk.</td></tr>`;
+        lucide.createIcons();
+    });
+
+    db.ref('settings').on('value', s => {
+        const d = s.val() || {}; catalog = d.catalog || [];
+        document.getElementById('sd').value = d.depo || "";
+        let h = "";
+        catalog.forEach((p,i) => {
+            h += `<div class="card" style="display:flex; justify-content:space-between; align-items:center; padding: 15px 25px;">
+                    <div><b>${p.name}</b> <span class="badge-cat">${p.category || 'Standard'}</span></div>
+                    <div style="display:flex; gap:15px; align-items:center;">
+                        <span style="color:var(--p); font-weight:bold;">${p.price} VGL</span>
+                        <button class="btn" onclick="delP(${i})" style="background:#ef4444; padding:8px 12px;">DELETE</button>
+                    </div>
+                  </div>`;
+        });
+        document.getElementById('list-p').innerHTML = h || `<p style="opacity:0.5;">Katalog masih kosong.</p>`;
+    });
+
+    db.ref('notification').on('value', s => {
+        const n = s.val() || {};
+        document.getElementById('n-title').value = n.title || "";
+        document.getElementById('n-msg').value = n.message || "";
+        document.getElementById('n-status').value = n.status || "inactive";
+    });
+
+    function saveN() { 
+        db.ref('notification').set({ 
+            title: document.getElementById('n-title').value, 
+            message: document.getElementById('n-msg').value, 
+            status: document.getElementById('n-status').value 
+        }); 
+        Swal.fire('Sukses','Notifikasi berhasil diupdate!','success'); 
+    }
+
+    // Fungsi Add Product yang sudah disesuaikan ada Kategorinya
+    function addP() { 
+        const name = document.getElementById('cn').value;
+        const price = document.getElementById('cp').value;
+        const cat = document.getElementById('ccat').value;
+
+        if(!name || !price) return Swal.fire('Error', 'Nama dan Harga harus diisi!', 'error');
+
+        catalog.push({ name: name, price: price, category: cat }); 
+        db.ref('settings').update({ catalog: catalog }); 
+        
+        document.getElementById('cn').value = '';
+        document.getElementById('cp').value = '';
+        Swal.fire('Sukses', 'Produk masuk ke '+cat+'!', 'success');
+    }
+
+    function delP(i) { 
+        Swal.fire({
+            title: 'Hapus Produk?', text: "Produk akan hilang dari toko.", icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Ya, Hapus!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                catalog.splice(i,1); 
+                db.ref('settings/catalog').set(catalog); 
+            }
+        })
+    }
+    
+    function saveS() { 
+        db.ref('settings').update({depo: document.getElementById('sd').value}); 
+        Swal.fire('Tersimpan', 'World Deposit terupdate!', 'success');
+    }
+    function upStat(id, s) { db.ref('orders/'+id).update({status:s}); }
+    async function done(id) { 
+        const sn = await db.ref('settings').once('value'); 
+        db.ref('settings').update({ active: Math.max(0, (sn.val().active || 0)-1) }); 
+        db.ref('orders/'+id).update({status:'Done'}); 
+    }
+    function reset() { 
+        Swal.fire({
+            title: 'RESET SEMUA DATA?', text: "Antrean dan Riwayat akan dihapus permanen!", icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'RESET TOTAL'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                db.ref('orders').remove(); 
+                db.ref('settings').update({active:0, lastQ:0}); 
+                Swal.fire('Direset!', 'Data bersih seperti baru.', 'success');
+            }
+        })
+    }
+</script>
+</body>
+</html>
